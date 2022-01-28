@@ -1,0 +1,48 @@
+pipeline{
+    agent any
+    environment {
+        PATH = "$PATH:/usr/share/maven/bin"
+    }
+    stages{
+       stage('GetCode'){
+            steps{
+              git 'https://github.com/javahometech/simple-app.git'
+            }
+         }        
+       stage('Build'){
+            steps{
+                sh 'mvn package'
+            }
+         }
+        stage ('code quality'){
+            steps{
+                withSonarQubeEnv('sonarqube'){
+                sh 'mvn sonar:sonar'
+                }
+            }
+        }
+        stage ('nexus upload'){
+            steps{
+                nexusArtifactUploader artifacts: [[artifactId: 'simple-app', classifier: '', file: 'target/simple-app-3.0.0-SNAPSHOT.war', type: 'war']], credentialsId: 'nexus3.1', groupId: 'in.javahome', nexusUrl: '3.110.47.137:8081/repository/java_jatin/', nexusVersion: 'nexus3', protocol: 'http', repository: 'java_jatin', version: '3.0.0-SNAPSHOT'
+            }
+        }
+        stage ('DevDeploy'){
+            steps{
+                deploy adapters: [tomcat9(credentialsId: 'Tomcat9', path: '', url: 'http://13.233.82.44:8080/')], contextPath: null, war: '**/*.war'
+            }
+        }
+        stage ('Dev approval'){
+            steps{
+                echo "Taking approval from QA manager"
+        timeout(time: 7, unit: 'DAYS') {
+        input message: 'Do you want to proceed to PROD?', submitter: 'admin,manager_userid'
+        }
+      }
+    }
+       stage ('Qa deploy'){
+           steps{
+               deploy adapters: [tomcat9(credentialsId: 'Tomcat9', path: '', url: 'http://13.127.115.201:8080/')], contextPath: null, war: '**/*.war'
+           }
+       }
+    }
+}
